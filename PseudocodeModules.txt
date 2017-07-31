@@ -1,0 +1,839 @@
+---------------------------------------------------------------------
+Main method : Startup module
+---------------------------------------------------------------------
+
+/*
+* The program begins from this module. The Startup module initialises all the 
+* top-level modules of the system. These top-level modules in turn declare 
+* and define the required variables and sub-modules.
+*
+*/
+
+Startup module
+{
+
+	- Start the web-server on the central server machine
+
+	- invoke "Database module"
+
+	- invoke "Web-Content Handler module"
+
+	- invoke "Trigger module"
+
+	- invoke "Communication module"
+
+}
+
+
+---------------------------------------------------------------------
+Top level modules
+---------------------------------------------------------------------
+
+/*
+* The Database module uses MySQL as the datastore. It defines the tables 
+* required to store user login, subscribers, geo-location, mobile numbers and 
+* pixel values of the generated output hazard map. This module creates a pool 
+* of database connections that can be re-used by the system. It defines  
+* sub-modules to query and insert records in to the database tables.
+*
+*/
+
+Database module
+{
+
+	- define "Connection Pool" sub-module
+
+	- invoke "Create Database" sub-module
+
+	- invoke "Initialise Server Database" sub-module
+
+	- invoke "Initialise Client Database" sub-module	
+
+}
+
+
+/*
+* This defines sub-modules to create GUI on the client machine. It provides
+* a HTML page for user login to enter the system. It downloads the GUI to the 
+* client machine on successful user login. This module provides controls to
+* view the input Thematic maps, process them to create the output Hazard map, 
+* to send warning SMS and to create new subscribers.
+*
+*/
+
+Web-Content Handler module
+{
+
+	- define "Initialise GUI" sub-module
+
+	- define "Create New Subscriber" sub-module
+
+	- invoke "User Login" sub-module	
+
+}
+
+
+/*
+* This module accepts the encapsulated information packet from the Web-
+* Content Handler module. Based on the level of threat, it incorporates 
+* the frequency of SMS. It then triggers the Communication module to 
+* send warning SMSs to the mobile numbers in the affeced zone.
+*
+*/
+
+Trigger module
+{	
+
+	- declare and set the THREAT_TO_SMS_FREQUENCY_MAPPING variable. This 
+	  contains the mapping between Threat level and Frequency of SMS 
+
+	- define "Process Information Packet" sub-module
+
+	- define "Searching and Matching" sub-module
+
+	- define "Set SMS Frequency" sub-module
+
+	- define "Trigger Hazard Warning" sub-module
+
+}
+
+
+/*
+* The Communication module receives the information packets from the Trigger 
+* module and performs the actual delivery of the warning messages to subscriber
+* mobile numbers. The delivery of messages is logged and shown to user on the 
+* client GUI. 
+*
+*/
+
+Communication module
+{
+
+	- define DELIVERY_MODE variable in the set 
+	  [SELF_HARDWARE, INTERNET_SOFTWARE, CBC(Cell Broadcast Center)]
+
+	- define "Send SMS" sub-module
+
+}
+
+
+---------------------------------------------------------------------
+Sub-modules of Database module
+---------------------------------------------------------------------
+
+Create Database
+{
+
+	- create the database and set appropriate permissions to the database
+
+	- create the "User" table with the following fields:	  
+	  subscriber mobile number
+	  username
+	  password
+	  (The password is stored in encrypted form in the database)	  
+
+	- create the "Location" table with the following fields:
+	  pixel value in the generated hazard map
+	  zone (latitude/longitude)
+	  threat level (LOW, MODERATE, HIGH)
+
+	- create the "Threat Message" table with the following fields:
+	  zone	  
+	  threat level
+	  threat message
+
+	- create the "Subscriber" table with the following fields:
+	  subscriber name
+	  subscriber mobile number
+	  zone
+
+	- set appropriate permissions to the tables
+
+	- invoke "Create Connection Pool" sub-module of "Database module"
+
+}
+
+
+Initialise Server Database
+{
+
+	- Store threat level along with associated geo-location
+	  (Threat levels : High, Moderate, Low)
+
+	- Store threat messages associated with threat levels	
+
+}
+
+
+Initialise Client Database
+{
+
+	- Store username and encrypted password in the user table
+	
+	- Store mobile numbers and associated geo-location of registered 
+	  subscribers
+}
+
+
+Connection Pool
+{
+
+	- define "Create Connection Pool" sub-module
+
+	- define "Get Database Connection" sub-module
+
+	- define "Release Database Connection" sub-module
+
+}
+
+
+Create Connection Pool
+{
+
+	- declare a variable CONNECTION_POOL
+
+	- create a pre-defined number of database connections (say 10) 
+	  and store them in the CONNECTION_POOL variable
+
+	- execute the following steps in a loop
+	  {
+		- if the number of connections in CONNECTION_POOL is less than 3
+		  {
+				- create new database connections to fill the connection pool
+
+				- store the new connections in CONNECTION_POOL variable
+		  }			  
+
+		- wait/sleep for 1 minute
+
+		- continue with the loop
+	  }
+
+}
+
+
+Get Database Connection
+{
+
+	- if CONNECTION_POOL is not empty
+	  {
+		- return a database connection from the CONNECTION_POOL
+	  }
+	  else
+	  {
+		- return an error indicating that CONNECTION_POOL is empty
+	  }
+
+}
+
+
+Release Database Connection
+{
+
+	- release all resources related to the database connection
+
+	- return the connection to the CONNECTION_POOL
+
+}
+
+
+Get Zone for Pixel
+{
+
+	- receive the pixel value as input
+
+	- invoke "Get Database Connection" sub-module of "Database module"
+
+	- query the zone data associated with the pixel value from the "Location"
+	  table
+
+	- invoke "Release Database Connection" sub-module of "Database module"
+
+	- return the retrieved zone(geo-location)
+
+}
+
+
+Get Subscriber Data
+{
+
+	- receive the geo-location (zone) as input
+
+	- invoke "Get Database Connection" sub-module of "Database module"
+
+	- query all subscriber mobile numbers associated with the input 
+	  geo-location from the "Subscriber" table
+
+	- invoke "Release Database Connection" sub-module of "Database module"
+
+	- return the retrieved subscriber mobile numbers for the zone
+
+}
+
+
+Get Location Threat Level
+{
+
+	- receive the geo-location (zone) as input
+
+	- invoke "Get Database Connection" sub-module of "Database module"
+
+	- query the threat level associated with the input geo-location from 
+	  the "Location" table
+
+	- invoke "Release Database Connection" sub-module of "Database module"
+
+	- return the retrieved threat level
+
+}
+
+
+Get Threat Message
+{
+
+	- receive the threat level as input
+
+	- invoke "Get Database Connection" sub-module of "Database module"
+
+	- query the threat message associated with the threat level from the 
+	  "Threat Message" table
+
+	- invoke "Release Database Connection" sub-module of "Database module"
+
+	- return the retrieved threat message
+
+)
+
+
+Insert Subscriber Data
+{
+
+	- receive the following input parameters:
+	  subsciber name
+	  mobile number
+	  zone (latitude/longitude)
+
+	- validate the input parameters
+
+	- invoke "Get Database Connection" sub-module of "Database module"
+
+	- insert a subscriber record into the "Subscriber" table
+
+	- invoke "Release Database Connection" sub-module of "Database module"
+
+	- return the status of the transaction : success or failure
+
+}
+
+
+Get Password for Username
+{
+
+	- invoke "Get Database Connection" sub-module of "Database module"
+
+	- invoke "Release Database Connection" sub-module of "Database module"
+
+}
+
+
+Store Geo-Location Threat Level
+{
+
+	- receive the following parameters as input
+	  pixel value
+	  geo-location
+	  threat level
+
+	- validate the input parameters
+
+	- invoke "Get Database Connection" sub-module of "Database module"
+
+	- insert the record with with data present in the input parameters into 
+	  "Location" table
+
+	- invoke "Release Database Connection" sub-module of "Database module"
+
+}
+
+
+---------------------------------------------------------------------
+Sub-modules of Web-Content Handler module
+---------------------------------------------------------------------
+
+/*
+* The Geo-Hazard-Assessment-System can be accessed over the web using a URL. 
+* Once the URL is entered in a browser, an initial login HTML page is sent  
+* from the server and displayed to user. Here, user provides the login 
+* credentials and submits the request. The login request is sent to the server 
+* for authentication. If the authentication succeeds, the client GUI of the 
+* Geo-Hazard-Assessment-System downloads to the user's machine from the server.
+*
+*/
+
+User Login
+{
+
+	- until the user successfully logs in to the system or the browser window is 
+	  closed, execute the following steps
+	  {
+
+		- provide the user with the login page with username and password 
+		  fields
+
+		- on submission of login request, send the request to the server
+
+		- invoke "Authenticate User" sub-module of the "Web-Content Handler 
+		  module"
+
+		- if user authentication is successful
+		  {
+			- download the client GUI to the user's machine from the server
+		  }
+		  else
+		  {
+			- display Authentication Failed error message to user
+
+			- prompt for login retry
+		  }
+		}
+
+}
+
+
+Authenticate User
+{
+
+	- declare AUTHENTICATION_STATUS variable
+
+	- receive the usename and password as input
+
+	- invoke "Get Password for Username" sub-module of "Database module"
+	  (the password is stored in encrypted form in the database)
+
+	- encrypt the input password and compare with the retrieved password 
+	  from previous step
+
+	- if the passwords match
+	  {
+		- set AUTHENTICATION_STATUS to SUCCESS
+	  }
+	  else
+	  {
+		- set AUTHENTICATION_STATUS to FAILED
+	  }
+
+	- return the value of AUTHENTICATION_STATUS variable
+
+}
+
+
+Initialise GUI
+{
+
+	- create a new window of the required size
+
+	- create buttons to view each kind of input thematic map
+
+	- create panel to view the input thematic maps
+
+	- create a control (button) to generate the output hazard map based on the 
+	  input thematic maps
+
+	- create a control (button) to send warning SMSs to resistered users
+
+	- create a control (button) to create new subscriber
+
+	- create a tabbed pane to view the running logs of the operations performed
+	  by user and their status : "Log" tab
+
+	- create a tabbed pane to view the mobile numbers to which SMSs were sent :
+	  "Properties" tab
+
+	- create button listeners to detect mouse events on click of the buttons
+
+}
+
+
+Button Listener
+{
+
+	- get the BUTTON_CLICKED value from the client GUI
+
+	- if BUTTON_CLICKED is LULC Map
+	  {
+		- invoke "Display Map" sub-module for LULC Map
+	  }
+	  else if BUTTON_CLICKED is Rainfall Map
+	  {
+		- invoke "Display Map" sub-module for Rainfall Map
+	  }
+	  else if BUTTON_CLICKED is Relief Map
+	  {
+		- invoke "Display Map" sub-module for Relief Map
+	  }
+	  else if BUTTON_CLICKED is Rock Map
+	  {
+		- invoke "Display Map" sub-module for Rock Map
+	  }
+	  else if BUTTON_CLICKED is Soil Map
+	  {
+		- invoke "Display Map" sub-module for Soil Map
+	  }
+	  else if BUTTON_CLICKED is Process Maps
+	  {
+		- invoke "Process Maps" sub-module
+
+		- invoke "Display Map" sub-module for generated output map
+	  }
+	  else if BUTTON_CLICKED is Send SMS
+	  {
+		- invoke "Create Confirmation Dailog" sub-module of 
+		  "Web-Content Handler module" with the following message:
+		  "SMS warning will be sent to all mobile numbers in the database
+		  in the given map area. This may take a while. Do you wish to 
+		  continue?"
+
+		- if "YES" status is returned in the previous step
+		  {
+		    - for every pixel in the output Hazard map execute the
+			  following steps:
+			  {
+			    - invoke "Get Zone for Pixel" sub-module of the 
+				  "Database module" by passing the pixel value from the output
+				  Hazard map
+
+			    - invoke "Get Subscriber Data" sub-module of the 
+				  "Database module" by passing the zone retrieved in the 
+				  previous step
+
+				- create an information packet with the following information:
+				  geo-location (latitude/longitude)
+				  list of mobile numbers present in this geo-location
+
+				- invoke "Process Information Packet" sub-module of "Trigger 
+				  module" and pass the information packet created in the 
+				  previous step to it.
+			  }
+		  }
+					  
+		- close the confirmation dialog box
+	  }
+	  else if BUTTON_CLICKED is Create New Subscriber
+	  {
+		- invoke "Create New Subscriber" sub-module of "Web-Content Handler 
+		  module"
+	  }
+	  else
+	  {
+		- BUTTON_CLICKED is unspecified, display error message to user
+	  }
+
+}
+
+
+Create Confirmation Dailog
+{
+
+	- receive the confirmation message as input
+
+	- open a dialog box with "Yes" and "No" buttons and display the 
+	  confirmation message in the dialog box
+
+	- if user clicks on the "Yes" button
+	  {
+		- return "YES" status
+	  }
+	  else
+	  {
+		- return "NO" status
+	  )
+
+}
+
+
+Display Map
+{
+
+	- get the map image file as input
+
+	- create an output stream from the server to the client machine
+
+	- send the image file stored on the server to client machine byte by byte
+
+	- on the client machine, load the image as an array of pixels into memory
+
+	- display the map in the image panel of the client GUI
+
+}
+
+
+Process Maps
+{
+
+	- invoke "Write to UI Log" of the "Web-Content Handler module" with 
+	  following arguments: 
+	  a string mentioning that the input Thematic maps are being processed
+	  "Log" tab
+
+	- receive the Thematic maps as input
+
+	- process the input Thematic maps pixel by pixel 
+
+	  (All input Thematic maps are assumed to be of the same dimension)
+	- for every pixel in the input Thematic Maps execute the following steps
+	  {
+		- get the pixel value (colour code) of the LULC map
+
+		- get the pixel value of the Rainfall map
+
+		- get the pixel value of the Relief map
+
+		- get the pixel value of the Rock map
+
+		- get the pixel value of the Soil map
+
+		- create a Rule string from the pixel values of all input 
+		  Thematic maps
+
+		- obtain the threat level for the Rule string from the KnowledgeBase
+
+		- get the colour code for the threat level obtained in previous step
+
+		- assign the retrieved colour code to the output hazard map's pixel 
+		  value
+	  }
+
+	- create the output hazard map using the generated pixels
+
+	- invoke "Store Geo-Location Threat Level" sub-module of "Database module"
+
+	- invoke "Display Map" sub-module for the generated output hazard map
+
+}
+
+
+Create New Subscriber
+{
+
+	- prompt user to enter the following details:
+	  Name
+	  Mobile number
+	  Latitude
+	  Longitude
+
+	  (Alternately, user may be given a map and prompted to mark the residing 
+	  location. The system will then autimatically generate and store the 
+	  corresponding latitude/longitude information.)
+
+	- invoke the "Insert Subscriber Data" sub-module of the "Database module"
+
+	- invoke "Write to UI Log" sub-module of "Web-Content Handler module" with 
+	  the following parameters:
+	  a message contining the sucess/failure status of the creation
+	  "Logs" tab
+
+}
+
+Write to UI Log
+{
+
+	- receive the following input parameters
+	  log message
+	  tab name 
+	  (There are 2 tabs in the logging panel : "Information" tab and the 
+	  "Properties" tab)
+
+	- Append the log message to the text area of the selected tab
+
+}
+
+
+---------------------------------------------------------------------
+Sub-modules of Trigger module
+---------------------------------------------------------------------
+
+Process Information Packet
+{
+
+	- receive the input parameters from the Web-Content Handler module	  
+	  geo-location (latitude, longitude)
+	  list of subscriber mobile numbers for the geo-location
+
+	- invoke "Get SMS Frequency" sub-module of the "Trigger module"
+
+	- set the SMS Frquency in the information packet
+
+	- invoke "Trigger Hazard Warning" sub-module of the "Trigger module" and 
+	  pass the updated information packet to it.
+	  (This forwards the information packet to the "Communication module" to 
+	  send warning SMSs)
+
+}
+
+
+Get SMS Frequency
+{
+
+	- get the threat level as input 
+
+	- get the SMS Frequency from THREAT_TO_SMS_FREQUENCY_MAPPING variable in 
+	  "Trigger module" by passing the Threat level.
+
+	- return the SMS Frequency
+
+}
+
+
+Trigger Hazard Warning
+{
+
+	- receive the information packet to be sent to "Communication module"
+
+	- invoke the "Send SMS" sub-module of "Communication module"
+
+	- invoke "Write to UI Log" of the "Web-Content Handler module" with 
+	  following arguments:
+	  a string mentioning that the SMS sending is triggered
+	  "Log" tab
+
+}
+
+
+Searching and Matching
+{
+
+	- //todo
+
+}
+
+
+---------------------------------------------------------------------
+Sub-modules of Communication module
+---------------------------------------------------------------------
+
+Send SMS
+{
+
+	- accept the subscriber mobile numbers, zone, associated threat message 
+	  and SMS frequency as input
+
+	- validate the input parameters
+
+	- Initialise ROUND_NUMBER variable to 1
+
+	- Process the following steps while ROUND_NUMBER is less than or equal to 
+	  "SMS frequency"
+	  {
+		- display the ROUND_NUMBER of the SMS being sent in the client GUI
+
+		- if DELIVERY_MODE is CBC 
+		  {			  
+			- call "Send SMS CBC" sub-module
+		  }
+		  else if DELIVERY_MODE is SELF_HARDWARE
+		  {
+			- call "Send SMS SELF_HARDWARE" sub-module			
+		  }
+		  else if DELIVERY_MODE is INTERNET_SOFTWARE
+		  {
+			- call "Send SMS INTERNET_SOFTWARE" sub-module
+		  }
+		  else
+		  {
+			- DELIVERY_MODE is not specified, display error message to user				
+		  }
+
+		  - display the status of SMS sent in client GUI
+
+		  - increment ROUND_NUMBER valiable by 1
+	  }
+
+}
+
+
+/*
+* The advantage of the CBC system is that it allows us to send messages without  
+* having to know the phone numbers of the users in the region. Instead of  
+* sending a message to a specific known mobile phone you can send a text to all 
+* mobile phones in a specific zone.
+*
+*/
+
+Send SMS CBC
+{	
+
+	- connect to the registered Cell Broadcast Center
+
+	- send threat message and the zone to the CBC connection
+
+	- disconnect from the Cell Broadcast Center
+
+	- invoke "Write to UI Log" of the "Web-Content Handler module" with 
+	  following arguments:
+	  a string mentioning the mobile number to which warning message is sent
+	  "Properties" tab
+
+	- return the status of SMS to "Send SMS" sub-module
+
+}
+
+
+/*
+* This required the system to be connected to a SMS gateway and a modem that 
+* can send SMSs
+*
+*/
+
+Send SMS SELF_HARDWARE
+{
+
+	- verify if the SMS gateway is connected
+
+	- verify if the modem to deliver the sms is connected to the system
+
+	- connect to the SMS gateway
+
+	- send threat message and mobile number to the SMS gateway
+
+	- disconnect from the SMS gateway
+
+	- invoke "Write to UI Log" of the "Web-Content Handler module" with 
+	  following arguments:
+	  a string mentioning the mobile number to which warning message is sent
+	  "Properties" tab
+
+	- return the status of SMS to "Send SMS" sub-module
+
+}
+
+
+/*
+* This uses websites on the internet that provide free SMS sending capabilities.
+* The administrator needs to pre-register on such websites to use the SMS 
+* sending capabilities.
+*
+*/
+
+Send SMS INTERNET_SOFTWARE
+{
+
+	- connect to the URL
+
+	- specify threat message and mobile number to the URL
+
+	- open an input stream reader encapsulated in a buffered reader from the URL		
+
+	- read the input stream and verify if the operation was successful
+
+	- close the input stream reader
+
+	- invoke "Write to UI Log" of the "Web-Content Handler module" with 
+	  following arguments:
+	  a string mentioning the mobile number to which warning message is sent
+	  "Properties" tab
+
+	- return the status of SMS to "Send SMS" sub-module
+
+}
+
+---------------------------------------------------------------------
